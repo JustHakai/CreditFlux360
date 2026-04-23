@@ -42,9 +42,10 @@ CREATE OR REPLACE TABLE creditflux360.bronze.raw_contrats(
 );
 
 -- Création des File Formats
+USE SCHEMA PUBLIC;
 
 -- CSV avec encodage
-CREATE OR REPLACE FILE FORMAT FF_CSV_BQVRT
+CREATE OR REPLACE FILE FORMAT FF_CSV
   TYPE = 'CSV'
   FIELD_DELIMITER = ';'
   ENCODING = 'ISO-8859-1'
@@ -55,12 +56,38 @@ CREATE OR REPLACE FILE FORMAT FF_CSV_BQVRT
 -- JSON / NDJSON
 CREATE OR REPLACE FILE FORMAT FF_JSON_NDJSON
   TYPE = 'JSON'
-  STRIP_OUTER_ARRAY = FALSE
+  STRIP_OUTER_ARRAY = FALSE;
 
 -- AVRO
-
 CREATE OR REPLACE FILE FORMAT FF_AVRO
   TYPE = 'AVRO';
-  
+
 -- Création du Stage S3
+
+-- Le bucket S3 étant encrypté, il nous faut un IAM Role que AWS reconnaitra pour y accéder
+USE ROLE ACCOUNTADMIN;
+
+CREATE OR REPLACE STORAGE INTEGRATION
+  banqueverte_s3_iam
+  TYPE = EXTERNAL_STAGE
+  ENABLED = TRUE
+  STORAGE_PROVIDER = 'S3'
+  STORAGE_AWS_ROLE_ARN = 'arn:aws:iam::565265042247:role/snowflake_ro_role'
+  STORAGE_ALLOWED_LOCATIONS = ('s3://banqueverte-landing-565265042247-us-west-2-an/');
+-- Il est nécessaire de modifier les trust policies du role dans AWS si le Storage Integration est recréé
+-- voir le résulat 
+DESC INTEGRATION banqueverte_s3_iam;
+
+-- Il est temps de redevenir SYSADMIN, maia avant il faut se donner le droit d'utiliser l'(ntégraton d'abord
+
+-- GRANT CREATE STAGE ON SCHEMA public TO ROLE ;
+
+GRANT USAGE ON INTEGRATION banqueverte_s3_iam TO ROLE SYSADMIN;
+
+USE ROLE SYSADMIN;
+
+CREATE or replace STAGE banqueverte_s3
+  STORAGE_INTEGRATION = banqueverte_s3_iam
+  URL = 's3://banqueverte-landing-565265042247-us-west-2-an/'
+  FILE_FORMAT = FF_CSV;
 
