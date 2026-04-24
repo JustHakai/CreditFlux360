@@ -91,3 +91,4 @@ CREATE or replace STAGE banqueverte_s3
   URL = 's3://banqueverte-landing-565265042247-us-west-2-an/'
   FILE_FORMAT = FF_CSV;
 
+LIST @banqueverte_s3;
