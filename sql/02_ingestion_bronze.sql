@@ -1,4 +1,8 @@
 
+ truncate table bronze.raw_transactions;
+ truncate table errors.bronze_load_errors;
+ truncate table bronze.stag_transactions;
+
 
 CREATE OR REPLACE FUNCTION CREDITFLUX360.BRONZE.HASH_IBAN(iban VARCHAR, salt VARCHAR)
   RETURNS VARCHAR
@@ -100,12 +104,18 @@ BEGIN
 
 END;
 
-select * from  errors.bronze_load_errors;
- -- truncate table bronze.raw_transactions;
 
-SELECT * FROM TABLE(VALIDATE(CREDITFLUX360.BRONZE.STAG_TRANSACTIONS, JOB_ID => '_last'))
--- WHERE error not like 'Date%'
-;
+
+select * from  errors.bronze_load_errors
+WHERE error_message not like 'Date%';
+
+
+
+
+
+
+
+
 
 -- Simulations
 
@@ -122,6 +132,15 @@ ON_ERROR = 'CONTINUE';
 
 
 select * from bronze.raw_simulations;
+
+
+
+
+
+
+
+
+
 -- Contrats
 
 COPY INTO CREDITFLUX360.BRONZE.RAW_CONTRATS (raw_data, loaded_at, source_file)
