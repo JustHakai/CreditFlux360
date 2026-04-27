@@ -54,8 +54,23 @@ BEGIN
     FILE_FORMAT = (FORMAT_NAME = 'FF_CSV')
     ON_ERROR = 'CONTINUE';
     
-    -- select $2 FROM @CREDITFLUX360.PUBLIC.BANQUEVERTE_S3/flux_transactions_20240315.csv
-    -- (FILE_FORMAT => 'FF_CSV');
+
+    --log load errors into error table
+    INSERT INTO CREDITFLUX360.errors.BRONZE_LOAD_ERRORS
+    SELECT
+      FILE            AS source_file,
+      REJECTED_RECORD AS rejected_record,
+      ERROR           AS error_message,
+      COLUMN_NAME     AS error_column,
+      ROW_NUMBER      AS row_number,
+      CURRENT_TIMESTAMP() AS loaded_at
+    FROM TABLE(
+      VALIDATE(
+        CREDITFLUX360.BRONZE.STAG_TRANSACTIONS,
+        JOB_ID => '_last'
+      )
+    );
+
     
     -- insert into bronze transactions table
     INSERT INTO CREDITFLUX360.BRONZE.RAW_TRANSACTIONS
@@ -77,14 +92,20 @@ BEGIN
     -- trucate to clear the raw data
     TRUNCATE TABLE CREDITFLUX360.BRONZE.STAG_TRANSACTIONS;
     
-    -- truncate table bronze.raw_transactions;
     
     -- select * from bronze.raw_transactions;
+
+
     RETURN 'Ingestion complete';
 
 END;
 
+select * from  errors.bronze_load_errors;
+ -- truncate table bronze.raw_transactions;
 
+SELECT * FROM TABLE(VALIDATE(CREDITFLUX360.BRONZE.STAG_TRANSACTIONS, JOB_ID => '_last'))
+-- WHERE error not like 'Date%'
+;
 
 -- Simulations
 

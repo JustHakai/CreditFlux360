@@ -41,6 +41,17 @@ CREATE OR REPLACE TABLE creditflux360.bronze.raw_contrats(
     source_file STRING
 );
 
+
+-- Création des tables d'erreur
+CREATE TABLE IF NOT EXISTS creditflux360.errors.bronze_load_errors (
+  source_file     VARCHAR,
+  rejected_record VARCHAR,
+  error_message   VARCHAR,
+  error_column    VARCHAR,
+  row_number      NUMBER,
+  loaded_at       TIMESTAMP
+);
+
 -- Création des File Formats
 USE SCHEMA PUBLIC;
 
@@ -51,7 +62,8 @@ CREATE OR REPLACE FILE FORMAT FF_CSV
   ENCODING = 'ISO-8859-1'
   SKIP_HEADER = 1
   NULL_IF = ('', 'NULL')
-  EMPTY_FIELD_AS_NULL = TRUE;
+  EMPTY_FIELD_AS_NULL = TRUE
+  DATE_FORMAT = 'DD/MM/YYYY';
 
 -- JSON / NDJSON
 CREATE OR REPLACE FILE FORMAT FF_JSON_NDJSON
@@ -92,3 +104,5 @@ CREATE or replace STAGE banqueverte_s3
   FILE_FORMAT = FF_CSV;
 
 LIST @banqueverte_s3;
+
+
