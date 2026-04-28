@@ -264,7 +264,8 @@ FROM TABLE(
 
 truncate table bronze.raw_simulations;
 
-select * from bronze.raw_simulations;
+select * from bronze.raw_simulations
+;
 select * from errors.bronze_load_errors;
 
 
@@ -289,5 +290,11 @@ ON_ERROR = 'CONTINUE';
 
 
 select * from bronze.raw_contrats;
+
+
+
+
+
+
 
 
