@@ -110,3 +110,4 @@ WHERE raw_data:revenu_mensuel_net::FLOAT > 0
 select * from silver.silver_contrats;
 
 
+
