@@ -1,7 +1,76 @@
 
+
+-- CREATION DES TABLES BRONZES
+CREATE OR REPLACE TABLE creditflux360.bronze.raw_transactions(
+  id_transaction STRING,
+  iban_client STRING,
+  date_operation STRING,
+  type_operation STRING,
+  montant_operation FLOAT,
+  id_contrat_credit STRING,
+  code_agence STRING,
+  statut_operation STRING,
+  motif_rejet STRING,
+  loaded_at TIMESTAMP_NTZ DEFAULT CURRENT_TIMESTAMP(),
+  source_file STRING
+);
+
+CREATE OR REPLACE TABLE creditflux360.bronze.raw_simulations(
+    raw_data VARIANT,
+    loaded_at TIMESTAMP_NTZ DEFAULT CURRENT_TIMESTAMP(),
+    source_file STRING
+);
+
+CREATE OR REPLACE TABLE creditflux360.bronze.raw_contrats(
+    raw_data VARIANT,
+    loaded_at TIMESTAMP_NTZ DEFAULT CURRENT_TIMESTAMP(),
+    source_file STRING
+);
+
+
+-- Création des tables d'erreur
+CREATE TABLE IF NOT EXISTS creditflux360.errors.bronze_load_errors (
+  source_file     VARCHAR,
+  rejected_record VARCHAR,
+  error_message   VARCHAR,
+  error_column    VARCHAR,
+  row_number      NUMBER,
+  loaded_at       TIMESTAMP
+);
+
+
+-- Création de la table de staging  et de sa masking policy
+
+CREATE OR REPLACE MASKING POLICY CREDITFLUX360.BRONZE.MASK_IBAN
+AS (val VARCHAR) RETURNS VARCHAR ->
+  CASE
+    WHEN CURRENT_ROLE() IN ('ACCOUNTADMIN') THEN val
+    ELSE '****-****-MASKED'
+  END;
+
+-- Création d'une table de staging des données (temporaire)
+CREATE OR REPLACE TRANSIENT TABLE CREDITFLUX360.BRONZE.STAG_TRANSACTIONS (
+    id_transaction  VARCHAR,
+    iban            VARCHAR WITH MASKING POLICY CREDITFLUX360.BRONZE.MASK_IBAN, 
+    date_operation  VARCHAR,
+    type_operation  VARCHAR,
+    montant_operation NUMBER,
+    id_contrat_credit VARCHAR,
+    code_agence     VARCHAR,
+    statut_operation VARCHAR,
+    motif_rejet     VARCHAR,
+    source_file     VARCHAR
+);
+
+CREATE OR REPLACE TRANSIENT TABLE CREDITFLUX360.BRONZE.STAG_SIMULATIONS (
+    raw_data    VARIANT,
+    source_file VARCHAR
+);
+
  truncate table bronze.raw_transactions;
  truncate table errors.bronze_load_errors;
  truncate table bronze.stag_transactions;
+ truncate table bronze.stag_simulations;
 
 
 CREATE OR REPLACE FUNCTION CREDITFLUX360.BRONZE.HASH_IBAN(iban VARCHAR, salt VARCHAR)
@@ -11,23 +80,23 @@ CREATE OR REPLACE FUNCTION CREDITFLUX360.BRONZE.HASH_IBAN(iban VARCHAR, salt VAR
     SHA2(CONCAT(iban, salt), 256)
   $$;
 
+
+
+--
+----
+-------
+----------
+-------------- CHARGEMENT DES DONNEES 
+----------
+-------
+----
+--
+
+
+
 -- Transactions
 BEGIN
--- Création d'une table de staging des données (temporaire)
-    CREATE OR REPLACE TRANSIENT TABLE CREDITFLUX360.BRONZE.STAG_TRANSACTIONS (
-      id_transaction  VARCHAR,
-      iban            VARCHAR,
-      date_operation  DATE,
-      type_operation  VARCHAR,
-      montant_operation NUMBER,
-      id_contrat_credit VARCHAR,
-      code_agence     VARCHAR,
-      statut_operation VARCHAR,
-      motif_rejet     VARCHAR,
-      source_file     VARCHAR
-    );
-    
-    -- copie des données en brut dans la table 0
+    -- copie des données en brut dans la table de staging
     COPY INTO CREDITFLUX360.BRONZE.STAG_TRANSACTIONS
     (
     iban,
@@ -53,7 +122,7 @@ BEGIN
         $8  AS statut_operation,
         $9  AS motif_rejet,
         METADATA$FILENAME AS source_file
-      FROM @CREDITFLUX360.PUBLIC.BANQUEVERTE_S3/flux_transactions_20240315.csv
+      FROM @CREDITFLUX360.BRONZE.BANQUEVERTE_S3/flux_transactions_20240315.csv
     )
     FILE_FORMAT = (FORMAT_NAME = 'FF_CSV')
     ON_ERROR = 'CONTINUE';
@@ -94,7 +163,7 @@ BEGIN
     
     
     -- trucate to clear the raw data
-    TRUNCATE TABLE CREDITFLUX360.BRONZE.STAG_TRANSACTIONS;
+    -- TRUNCATE TABLE CREDITFLUX360.BRONZE.STAG_TRANSACTIONS;
     
     
     -- select * from bronze.raw_transactions;
@@ -107,9 +176,10 @@ END;
 
 
 select * from  errors.bronze_load_errors
-WHERE error_message not like 'Date%';
+-- WHERE error_message not like 'Date%'
+;
 
-
+select * from bronze.raw_transactions;
 
 
 
@@ -118,21 +188,84 @@ WHERE error_message not like 'Date%';
 
 
 -- Simulations
-
-COPY INTO RAW_SIMULATIONS (raw_data, loaded_at, source_file)
+COPY INTO CREDITFLUX360.BRONZE.STAG_SIMULATIONS (raw_data, source_file)
 FROM (
   SELECT
     $1,
-    CURRENT_TIMESTAMP(),
     METADATA$FILENAME
-  FROM @CREDITFLUX360.PUBLIC.banqueverte_s3/app_simulations_credit_v1.json
-  (FILE_FORMAT => 'CREDITFLUX360.PUBLIC.FF_JSON_NDJSON')
+  FROM @CREDITFLUX360.BRONZE.banqueverte_s3/app_simulations_credit_v1.json
+  (FILE_FORMAT => 'CREDITFLUX360.BRONZE.FF_RAW_LINES')
 )
-ON_ERROR = 'CONTINUE';
+ON_ERROR = 'CONTINUE'
+FORCE = TRUE;
 
+
+-- COPY INTO CREDITFLUX360.BRONZE.STAG_SIMULATIONS (raw_data, source_file)
+-- FROM (
+--   SELECT
+--     $1,
+--     METADATA$FILENAME
+--   FROM @CREDITFLUX360.BRONZE.banqueverte_s3/app_simulations_credit_v1.json
+--   (FILE_FORMAT => 'CREDITFLUX360.BRONZE.FF_JSON_NDJSON')
+-- )
+-- ON_ERROR = 'CONTINUE'
+-- FORCE = TRUE;
+
+-- INSERT INTO CREDITFLUX360.BRONZE.RAW_SIMULATIONS (raw_data, loaded_at, source_file)
+-- SELECT
+--   raw_data,
+--   CURRENT_TIMESTAMP(),
+--   source_file
+-- FROM CREDITFLUX360.BRONZE.STAG_SIMULATIONS;
+
+--copy from staging to raw simulation
+
+INSERT INTO CREDITFLUX360.BRONZE.RAW_SIMULATIONS (raw_data, loaded_at, source_file)
+SELECT
+  TRY_PARSE_JSON(raw_data),
+  CURRENT_TIMESTAMP(),
+  source_file
+FROM CREDITFLUX360.BRONZE.STAG_SIMULATIONS
+WHERE TRY_PARSE_JSON(raw_data) IS NOT NULL
+  AND TRIM(raw_data) != '';
+
+--load errors
+
+INSERT INTO CREDITFLUX360.ERRORS.BRONZE_LOAD_ERRORS (
+  source_file, rejected_record, error_message, error_column, row_number, loaded_at
+)
+SELECT
+  source_file,
+  raw_data,
+  'Invalid JSON - parse failed',
+  NULL,
+  NULL,
+  CURRENT_TIMESTAMP()
+FROM CREDITFLUX360.BRONZE.STAG_SIMULATIONS
+WHERE TRY_PARSE_JSON(raw_data) IS NULL
+  AND TRIM(raw_data) != '';
+
+
+INSERT INTO CREDITFLUX360.errors.BRONZE_LOAD_ERRORS
+SELECT
+    FILE            AS source_file,
+    REJECTED_RECORD AS rejected_record,
+    ERROR           AS error_message,
+    COLUMN_NAME     AS error_column,
+    ROW_NUMBER      AS row_number,
+    CURRENT_TIMESTAMP() AS loaded_at
+FROM TABLE(
+    VALIDATE(
+    CREDITFLUX360.BRONZE.STAG_SIMULATIONS,
+    JOB_ID => '_last'
+    )
+);
+
+
+truncate table bronze.raw_simulations;
 
 select * from bronze.raw_simulations;
-
+select * from errors.bronze_load_errors;
 
 
 
@@ -149,8 +282,12 @@ FROM (
     $1,                          -- Tout l'enregistrement Avro dans VARIANT
     CURRENT_TIMESTAMP(),
     METADATA$FILENAME
-  FROM @PUBLIC.BANQUEVERTE_S3/contrats_credit_full.avro
+  FROM @BRONZE.BANQUEVERTE_S3/contrats_credit_full.avro
 )
 FILE_FORMAT = (FORMAT_NAME = 'FF_AVRO')
 ON_ERROR = 'CONTINUE';
+
+
+select * from bronze.raw_contrats;
+
 

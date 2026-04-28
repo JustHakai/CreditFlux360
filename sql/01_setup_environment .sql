@@ -14,49 +14,13 @@ CREATE OR REPLACE SCHEMA creditflux360.gold;
 CREATE OR REPLACE SCHEMA creditflux360.errors; --schéma pour contenir les différentes tables d'erreur
 
 
--- Création des tables bronzes
-CREATE OR REPLACE TABLE creditflux360.bronze.raw_transactions(
-  id_transaction STRING,
-  iban_client STRING,
-  date_operation STRING,
-  type_operation STRING,
-  montant_operation FLOAT,
-  id_contrat_credit STRING,
-  code_agence STRING,
-  statut_operation STRING,
-  motif_rejet STRING,
-  loaded_at TIMESTAMP_NTZ DEFAULT CURRENT_TIMESTAMP(),
-  source_file STRING
-);
-
-CREATE OR REPLACE TABLE creditflux360.bronze.raw_simulations(
-    raw_data VARIANT,
-    loaded_at TIMESTAMP_NTZ DEFAULT CURRENT_TIMESTAMP(),
-    source_file STRING
-);
-
-CREATE OR REPLACE TABLE creditflux360.bronze.raw_contrats(
-    raw_data VARIANT,
-    loaded_at TIMESTAMP_NTZ DEFAULT CURRENT_TIMESTAMP(),
-    source_file STRING
-);
-
-
--- Création des tables d'erreur
-CREATE TABLE IF NOT EXISTS creditflux360.errors.bronze_load_errors (
-  source_file     VARCHAR,
-  rejected_record VARCHAR,
-  error_message   VARCHAR,
-  error_column    VARCHAR,
-  row_number      NUMBER,
-  loaded_at       TIMESTAMP
-);
+    
 
 -- Création des File Formats
 USE SCHEMA PUBLIC;
 
 -- CSV avec encodage
-CREATE OR REPLACE FILE FORMAT FF_CSV
+CREATE OR REPLACE FILE FORMAT BRONZE.FF_CSV
   TYPE = 'CSV'
   FIELD_DELIMITER = ';'
   ENCODING = 'ISO-8859-1'
@@ -66,15 +30,25 @@ CREATE OR REPLACE FILE FORMAT FF_CSV
   DATE_FORMAT = 'DD/MM/YYYY';
 
 -- JSON / NDJSON
-CREATE OR REPLACE FILE FORMAT FF_JSON_NDJSON
+CREATE OR REPLACE FILE FORMAT BRONZE.FF_JSON_NDJSON
   TYPE = 'JSON'
-  STRIP_OUTER_ARRAY = FALSE;
+  STRIP_OUTER_ARRAY = FALSE
+  MULTI_LINE= FALSE;
 
 -- AVRO
-CREATE OR REPLACE FILE FORMAT FF_AVRO
+CREATE OR REPLACE FILE FORMAT BRONZE.FF_AVRO
   TYPE = 'AVRO';
 
+-- Raw Lines 
+CREATE OR REPLACE FILE FORMAT CREDITFLUX360.BRONZE.FF_RAW_LINES
+  TYPE = 'CSV'
+  FIELD_DELIMITER = NONE
+  RECORD_DELIMITER = '\n'
+  ESCAPE = NONE
+  ESCAPE_UNENCLOSED_FIELD = NONE;
+
 -- Création du Stage S3
+
 
 -- Le bucket S3 étant encrypté, il nous faut un IAM Role que AWS reconnaitra pour y accéder
 USE ROLE ACCOUNTADMIN;
@@ -98,11 +72,28 @@ GRANT USAGE ON INTEGRATION banqueverte_s3_iam TO ROLE SYSADMIN;
 
 USE ROLE SYSADMIN;
 
-CREATE or replace STAGE banqueverte_s3
+CREATE or replace STAGE bronze.banqueverte_s3
   STORAGE_INTEGRATION = banqueverte_s3_iam
   URL = 's3://banqueverte-landing-565265042247-us-west-2-an/'
   FILE_FORMAT = FF_CSV;
 
 LIST @banqueverte_s3;
+
+
+
+
+
+
+
+
+
+--
+-----
+--------
+------------- 
+--------
+-----
+--
+
 
 
