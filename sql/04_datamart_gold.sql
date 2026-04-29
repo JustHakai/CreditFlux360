@@ -3,6 +3,8 @@
 
 -- Création de la vue métier finale
 
+
+
 CREATE OR REPLACE VIEW CREDITFLUX360.GOLD.GOLD_ANALYSE_RISQUE_CREDIT AS
 
 WITH transactions_aggregees AS (
@@ -45,9 +47,17 @@ SELECT
   AVG(c.montant_accorde - s.montant_souhaite)              AS ecart_moyen_simulation_accord
 
 FROM CREDITFLUX360.SILVER.SILVER_CONTRATS c
-LEFT JOIN transactions_aggregees t     ON c.client_id = t.id_contrat_credit
-LEFT JOIN simulations_par_contrat s    ON c.client_id = s.contract_id
+LEFT JOIN transactions_aggregees t     ON c.id_contrat_credit = t.id_contrat_credit
+LEFT JOIN simulations_par_contrat s    ON c.id_contrat_credit = s.contract_id
 
 GROUP BY c.type_contrat, c.gamme_contrat, c.classe_eba;
 
+select * from gold.gold_analyse_risque_credit;
 
+
+  SELECT
+    contract_id,
+    montant_souhaite,
+    mensualite_estimee
+  FROM CREDITFLUX360.SILVER.SILVER_SIMULATIONS
+  QUALIFY ROW_NUMBER() OVER (PARTITION BY contract_id ORDER BY timestamp_utc DESC) = 1;

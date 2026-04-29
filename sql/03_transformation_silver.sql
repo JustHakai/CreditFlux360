@@ -76,6 +76,7 @@ SELECT
   raw_data:client_id::STRING          AS client_id,
   raw_data:iban_hash::STRING          AS iban_hash,
   raw_data:nom_hash::STRING           AS nom_hash,
+  raw_data:id_contrat_credit::STRING  AS id_contrat_credit,
   TRY_TO_DATE(raw_data:date_naissance::STRING, 'YYYY-MM-DD') AS date_naissance,
   raw_data:revenu_mensuel_net::FLOAT  AS revenu_mensuel_net,
   raw_data:type_contrat::STRING       AS type_contrat,
